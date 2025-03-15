@@ -2,25 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-
-interface ListData {
-  id: number
-  title: string
-  createdAt: string
-  items: any[]
-}
+import { storage, List } from '../lib/storage'
 
 export default function AllLists() {
-  const [lists, setLists] = useState<ListData[]>([])
+  const [lists, setLists] = useState<List[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const fetchLists = async () => {
+  const fetchLists = () => {
     try {
-      const response = await fetch('/api/lists')
-      if (!response.ok) {
-        throw new Error('Failed to fetch lists')
-      }
-      const data = await response.json()
+      const data = storage.getLists()
       // Sort lists by title in reverse order
       const sortedLists = [...data].sort((a, b) => b.title.localeCompare(a.title))
       setLists(sortedLists)

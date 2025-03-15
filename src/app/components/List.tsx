@@ -1,65 +1,51 @@
+'use client'
+
 import { useState, useEffect } from 'react'
-
-interface ListItem {
-  id: number
-  content: string
-  position: number
-  isCollection?: boolean
-}
-
-interface Collection {
-  id: number
-  title: string
-  items: { content: string }[]
-}
+import { storage, Collection, ListItem } from '../lib/storage'
 
 interface ListProps {
-  id: number
+  id: string
   title: string
   items: ListItem[]
-  onAddItem: (content: string, isCollection?: boolean) => void
+  onAddItem: (content: string) => Promise<ListItem>
 }
 
 export default function List({ id, title, items = [], onAddItem }: ListProps) {
   const [newItem, setNewItem] = useState('')
   const [collections, setCollections] = useState<Collection[]>([])
   const [showCollections, setShowCollections] = useState(false)
+  const [isAddingItems, setIsAddingItems] = useState(false)
 
   useEffect(() => {
-    const fetchCollections = async () => {
-      try {
-        const response = await fetch('/api/collections')
-        if (!response.ok) throw new Error('Failed to fetch collections')
-        const data = await response.json()
-        setCollections(data)
-      } catch (error) {
-        console.error('Error fetching collections:', error)
-      }
-    }
-    fetchCollections()
+    // Load collections from local storage
+    const data = storage.getCollections()
+    setCollections(data)
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (newItem.trim()) {
-      // Check if the input matches a collection name
-      const matchingCollection = collections.find(
-        c => c.title.toLowerCase() === newItem.trim().toLowerCase()
-      )
-      
-      if (matchingCollection) {
-        // If it's a collection, add each item from the collection
-        // Using Promise.all to add all items concurrently and wait for all to complete
-        const addPromises = matchingCollection.items.map(item => 
-          onAddItem(item.content)
+      try {
+        setIsAddingItems(true)
+        // Check if the input matches a collection name
+        const matchingCollection = collections.find(
+          c => c.title.toLowerCase() === newItem.trim().toLowerCase()
         )
-        await Promise.all(addPromises)
-      } else {
-        // If it's not a collection, add as normal item
-        await onAddItem(newItem.trim())
+        
+        if (matchingCollection) {
+          // Add each item from the collection sequentially
+          for (const item of matchingCollection.items) {
+            await onAddItem(item.content)
+          }
+        } else {
+          // Add as normal item
+          await onAddItem(newItem.trim())
+        }
+        setNewItem('')
+        setShowCollections(false)
+      } finally {
+        setIsAddingItems(false)
       }
-      setNewItem('')
-      setShowCollections(false)
     }
   }
 
@@ -80,57 +66,53 @@ export default function List({ id, title, items = [], onAddItem }: ListProps) {
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-      
-      <form onSubmit={handleSubmit} className="mb-4 relative">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={newItem}
-              onChange={handleInputChange}
-              placeholder="Add new item or type collection name"
-              className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white placeholder-gray-400 border-gray-600"
-            />
-            
-            {/* Collections dropdown */}
-            {showCollections && collections.length > 0 && (
-              <div className="absolute w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
-                {collections
-                  .filter(c => c.title.toLowerCase().includes(newItem.toLowerCase()))
-                  .map(collection => (
-                    <button
-                      key={collection.id}
-                      type="button"
-                      onClick={() => selectCollection(collection)}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-600 text-white"
-                    >
-                      <div className="font-medium">{collection.title}</div>
-                      <div className="text-sm text-gray-400">
-                        {collection.items.length} items
-                      </div>
-                    </button>
-                  ))}
-              </div>
-            )}
-          </div>
-          <button
-            type="submit"
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            Add
-          </button>
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit} className="relative">
+        <div className="relative">
+          <input
+            type="text"
+            value={newItem}
+            onChange={handleInputChange}
+            disabled={isAddingItems}
+            className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+            placeholder={isAddingItems ? "Adding items..." : "Add a new item..."}
+          />
+          {isAddingItems && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-300 border-t-white"></div>
+            </div>
+          )}
         </div>
+        
+        {showCollections && collections.length > 0 && !isAddingItems && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-gray-700 rounded-lg shadow-lg overflow-hidden z-10">
+            {collections
+              .filter(c => c.title.toLowerCase().includes(newItem.toLowerCase()))
+              .map(collection => (
+                <button
+                  key={collection.id}
+                  type="button"
+                  onClick={() => selectCollection(collection)}
+                  className="w-full px-4 py-2 text-left text-white hover:bg-gray-600"
+                >
+                  {collection.title} ({collection.items.length} items)
+                </button>
+              ))}
+          </div>
+        )}
       </form>
 
       <ul className="space-y-2">
         {items.map((item, index) => (
           <li
             key={item.id}
-            className="flex items-center gap-2 p-2 hover:bg-gray-700 rounded-lg text-white"
+            className="bg-gray-700 px-4 py-2 rounded-lg text-white flex items-center"
           >
-            <span className="font-medium text-gray-400">{index + 1}.</span>
-            <span>{item.content}</span>
+            <span className="w-8 text-gray-400 font-medium">{index + 1}.</span>
+            <span className="flex-1">{item.content}</span>
+            {item.completed && (
+              <span className="text-green-500 ml-2">✓</span>
+            )}
           </li>
         ))}
       </ul>

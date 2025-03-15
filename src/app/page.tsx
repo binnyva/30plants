@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { storage, List as ListType } from './lib/storage'
 import Link from "next/link"
 import List from './components/List'
 
@@ -17,20 +18,16 @@ interface ListData {
 }
 
 export default function Home() {
-  const [latestList, setLatestList] = useState<ListData | null>(null)
+  const [latestList, setLatestList] = useState<ListType | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editedTitle, setEditedTitle] = useState('')
 
-  const fetchLatestList = async () => {
+  const fetchLatestList = () => {
     try {
-      const response = await fetch('/api/lists')
-      if (!response.ok) {
-        throw new Error('Failed to fetch lists')
-      }
-      const data = await response.json()
+      const lists = storage.getLists()
       // Get the most recent list
-      const sortedLists = [...data].sort((a, b) => 
+      const sortedLists = [...lists].sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       )
       setLatestList(sortedLists[0] || null)
@@ -44,19 +41,9 @@ export default function Home() {
     fetchLatestList()
   }, [])
 
-  const createNewList = async () => {
+  const createNewList = () => {
     try {
-      const response = await fetch('/api/lists', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title: 'New List' }), // Default title
-      })
-      if (!response.ok) {
-        throw new Error('Failed to create list')
-      }
-      const newList = await response.json()
+      const newList = storage.createList()
       setLatestList(newList)
       setEditedTitle(newList.title)
       setIsEditingTitle(true) // Automatically enter edit mode for new lists
@@ -66,23 +53,11 @@ export default function Home() {
     }
   }
 
-  const updateListTitle = async () => {
+  const updateListTitle = () => {
     if (!latestList || !editedTitle.trim()) return
 
     try {
-      const response = await fetch(`/api/lists/${latestList.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title: editedTitle.trim() }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update list title')
-      }
-
-      const updatedList = await response.json()
+      const updatedList = storage.updateList(latestList.id, { title: editedTitle.trim() })
       setLatestList(updatedList)
       setIsEditingTitle(false)
       setError(null)
@@ -97,116 +72,92 @@ export default function Home() {
     updateListTitle()
   }
 
-  const addItemToList = async (listId: number, content: string) => {
+  const addItemToList = async (listId: string, content: string) => {
     try {
-      console.log('Adding item to list:', { listId, content })
-      
-      const response = await fetch(`/api/lists/${listId}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      })
-      
-      const data = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to add item')
-      }
+      const newItem = storage.addListItem(listId, content)
       
       if (latestList && latestList.id === listId) {
         setLatestList({
           ...latestList,
-          items: [...latestList.items, data]
+          items: [...latestList.items, newItem]
         })
       }
       setError(null)
+      return newItem
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add item to list')
       console.error('Error adding item:', err)
+      throw err
     }
+  }
+
+  if (error) {
+    return (
+      <main className="container mx-auto px-4 py-8">
+        <div className="bg-red-500 text-white p-4 rounded-lg mb-6">
+          {error}
+        </div>
+      </main>
+    )
   }
 
   return (
     <main className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <div className="flex-1 mr-4">
-          <h1 className="text-3xl font-bold text-white">Latest List</h1>
+      <div className="mb-8">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-white">Plant List</h1>
+          <button
+            onClick={createNewList}
+            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            New List
+          </button>
         </div>
-        <button
-          onClick={createNewList}
-          className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
-        >
-          Create New List
-        </button>
       </div>
 
-      {error && (
-        <div className="bg-red-500 text-white p-4 rounded-lg mb-6">
-          {error}
+      {latestList ? (
+        <div className="bg-gray-800 rounded-lg p-6">
+          {isEditingTitle ? (
+            <form onSubmit={handleTitleSubmit} className="mb-6">
+              <input
+                type="text"
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                className="w-full bg-gray-700 text-white px-6 py-3 rounded-lg text-xl font-semibold border border-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 transition-all"
+                placeholder="Enter list title"
+                autoFocus
+              />
+            </form>
+          ) : (
+            <div className="mb-6 pb-4 border-b border-gray-700">
+              <h2
+                className="text-2xl font-bold text-white hover:text-gray-300 transition-colors cursor-pointer flex items-center gap-2"
+                onClick={() => {
+                  setIsEditingTitle(true)
+                  setEditedTitle(latestList.title)
+                }}
+              >
+                {latestList.title}
+                <span className="text-gray-500 text-sm hover:text-gray-400">✏️</span>
+              </h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Created {new Date(latestList.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+          )}
+
+          <List
+            id={latestList.id}
+            title={latestList.title}
+            items={latestList.items}
+            onAddItem={(content) => addItemToList(latestList.id, content)}
+          />
+        </div>
+      ) : (
+        <div className="text-center text-gray-400 py-8">
+          No lists yet. Create a new one to get started!
         </div>
       )}
-
-      <div className="space-y-6">
-        {latestList ? (
-          <div>
-            {isEditingTitle ? (
-              <form onSubmit={handleTitleSubmit} className="flex items-center gap-2 mb-4">
-                <input
-                  type="text"
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  className="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter list title"
-                  autoFocus
-                />
-                <button
-                  type="submit"
-                  className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditingTitle(false)
-                    setEditedTitle(latestList.title)
-                  }}
-                  className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </form>
-            ) : (
-              <div className="flex items-center gap-2 mb-4">
-                <h2 className="text-2xl font-bold text-white">{latestList.title}</h2>
-                <button
-                  onClick={() => {
-                    setIsEditingTitle(true)
-                    setEditedTitle(latestList.title)
-                  }}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  ✏️
-                </button>
-              </div>
-            )}
-            <List
-              key={latestList.id}
-              id={latestList.id}
-              title={latestList.title}
-              items={latestList.items}
-              onAddItem={(content) => addItemToList(latestList.id, content)}
-            />
-          </div>
-        ) : (
-          <div className="text-white text-center py-8">
-            No lists created yet. Create your first list!
-          </div>
-        )}
-      </div>
-
     </main>
   )
 }

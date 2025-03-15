@@ -1,20 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
-
-interface CollectionItem {
-  id: number
-  content: string
-  position: number
-}
-
-interface Collection {
-  id: number
-  title: string
-  items: CollectionItem[]
-  createdAt: string
-}
+import { storage, Collection, CollectionItem } from '../lib/storage'
 
 export default function Collections() {
   const [collections, setCollections] = useState<Collection[]>([])
@@ -23,17 +10,12 @@ export default function Collections() {
   const [newItemContent, setNewItemContent] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const fetchCollections = async () => {
+  const fetchCollections = () => {
     try {
-      const response = await fetch('/api/collections')
-      if (!response.ok) {
-        throw new Error('Failed to fetch collections')
-      }
-      const data = await response.json()
+      const data = storage.getCollections()
       setCollections(data)
-    } catch (err) {
-      setError('Failed to load collections')
-      console.error('Error fetching collections:', err)
+    } catch (error) {
+      console.error('Error fetching collections:', error)
     }
   }
 
@@ -41,22 +23,10 @@ export default function Collections() {
     fetchCollections()
   }, [])
 
-  const createCollection = async (e: React.FormEvent) => {
+  const createCollection = (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const response = await fetch('/api/collections', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title: newCollectionTitle }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to create collection')
-      }
-
-      const newCollection = await response.json()
+      const newCollection = storage.createCollection(newCollectionTitle)
       setCollections([...collections, newCollection])
       setNewCollectionTitle('')
       setError(null)
@@ -66,33 +36,18 @@ export default function Collections() {
     }
   }
 
-  const addItemToCollection = async (e: React.FormEvent) => {
+  const addItemToCollection = (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedCollection) return
 
     try {
-      const response = await fetch('/api/collection-items', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: newItemContent,
-          collectionId: selectedCollection.id,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to add item')
-      }
-
-      const newItem = await response.json()
+      const newItem = storage.addCollectionItem(selectedCollection.id, newItemContent)
       setSelectedCollection({
         ...selectedCollection,
         items: [...selectedCollection.items, newItem],
       })
       setNewItemContent('')
-      await fetchCollections() // Refresh the collections list
+      fetchCollections() // Refresh the collections list
       setError(null)
     } catch (err) {
       setError('Failed to add item to collection')
