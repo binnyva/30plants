@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "vite",
+    "build:dev": "vite build",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit --skipLibCheck",
     "serve": "vite preview",
