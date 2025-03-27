@@ -51,6 +51,7 @@
             placeholder="Add new item or collection name..."
             class="flex-1 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
             @keyup.enter="addItem"
+            @input="onInputChange"
           >
           <button
             class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
@@ -59,13 +60,20 @@
             Add
           </button>
         </div>
+
+        <!-- Suggestions List -->
+        <ul v-if="suggestions.length > 0" class="absolute bg-white border border-gray-300 mt-1 rounded shadow-lg">
+          <li v-for="(suggestion, index) in suggestions" :key="index" class="px-3 py-2 hover:bg-gray-200 cursor-pointer" @click="selectSuggestion(suggestion)">
+            {{ suggestion.name }}
+          </li>
+        </ul>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { usePlantStore } from '../store/plantStore'
 
@@ -74,6 +82,25 @@ const store = usePlantStore()
 const listTitle = ref('')
 const newItem = ref('')
 const isEditMode = ref(false)
+const suggestions = ref([])
+
+// Watch for changes in the input field
+const onInputChange = () => {
+  if (newItem.value.length >= 3) {
+    // Collect all items from the current list and all collections
+    const allItems = store.lists.value.flatMap(list => list.items).concat(store.collections.value)
+    suggestions.value = allItems.filter((item) => {
+      return item.name.toLowerCase().includes(newItem.value.toLowerCase())
+    })
+  } else {
+    suggestions.value = []
+  }
+}
+
+const selectSuggestion = (suggestion: { name: string }) => {
+  newItem.value = suggestion.name
+  suggestions.value = [] // Clear suggestions
+}
 
 const currentList = computed(() => {
   const listId = route.params.id as string
@@ -96,6 +123,7 @@ const updateTitle = () => {
 }
 
 const confirmDeleteList = () => {
+  // eslint-disable-next-line no-alert
   if (confirm('Are you sure you want to delete this list? This action cannot be undone.')) {
     if (currentList.value) {
       store.deleteList(currentList.value.id)
@@ -114,6 +142,7 @@ const addItem = () => {
   const itemExists = currentList.value.items.some(item => item.name.toLowerCase() === itemName.toLowerCase())
 
   if (itemExists) {
+    // eslint-disable-next-line no-alert
     alert('This item is already in the list.')
     newItem.value = ''
     return
