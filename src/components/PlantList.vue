@@ -152,8 +152,13 @@ const addItem = () => {
   const collection = store.collections.value.find(c => c.name.toLowerCase() === itemName.toLowerCase())
 
   if (collection) {
-    // If it's a collection, add all its items
-    store.addCollectionToList(currentList.value.id, collection.id)
+    // If it's a collection, add only items that are not already in the list
+    collection.items.forEach((item) => {
+      const alreadyExists = currentList.value?.items.some(existingItem => existingItem.name.toLowerCase() === item.name.toLowerCase())
+      if (!alreadyExists && currentList.value) {
+        store.addItemToList(currentList.value.id, item.name)
+      }
+    })
   } else {
     // If it's not a collection, add as a single item
     store.addItemToList(currentList.value.id, itemName)
