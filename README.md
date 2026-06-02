@@ -26,4 +26,6 @@ I will need a settings page which has the ability to export and import the entir
 
 ### Next Steps
 
-When viewing a list, once the edit button is pressed, there should be an option to delete the entire list with confirmation 
+- Auto complete UX - keyboard shortcuts
+- Auto complete list should disappear on input
+ 
